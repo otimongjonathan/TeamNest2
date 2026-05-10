@@ -1,11 +1,18 @@
 package com.example.teamnest
 
+import android.app.DownloadManager
 import android.content.Context
+import android.net.Uri
+import android.os.Environment
 import android.util.Log
+import android.widget.Toast
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 
@@ -16,16 +23,23 @@ class HomeViewModel : ViewModel() {
     val tasks = mutableStateListOf<Task>()
     val groups = mutableStateListOf<Group>()
     val invitations = mutableStateListOf<Invitation>()
+    val recentFiles = mutableStateListOf<SharedFile>()
+    
+    // UI Status Indicator
+    val syncStatus = mutableStateOf("Initializing...")
 
     private var tasksListener: ListenerRegistration? = null
     private var groupsListener: ListenerRegistration? = null
     private var invitationsListener: ListenerRegistration? = null
+    private var filesListener: ListenerRegistration? = null
     private var currentListeningEmail: String? = null
 
-    fun startListening(context: Context) {
+    fun startListening(context: Context? = null) {
         val userEmail = auth.currentUser?.email?.lowercase() ?: return
+        syncStatus.value = "Connecting as $userEmail..."
+        
+        Log.e("TEAMNEST_DEBUG", ">>> HOME SYNC START for $userEmail <<<")
 
-        // Reset if user changed
         if (currentListeningEmail != userEmail) {
             stopListening()
             currentListeningEmail = userEmail
@@ -46,11 +60,17 @@ class HomeViewModel : ViewModel() {
         if (groupsListener == null) {
             groupsListener = db.collection("groups")
                 .whereArrayContains("memberEmails", userEmail)
-                .addSnapshotListener { snapshot, _ ->
+                .addSnapshotListener { snapshot, e ->
+                    if (e != null) {
+                        syncStatus.value = "Group Error: ${e.code}"
+                        Log.e("TEAMNEST_DEBUG", "Group listener error: ${e.message}")
+                        return@addSnapshotListener
+                    }
+                    val fetchedGroups = snapshot?.documents?.mapNotNull { it.toObject(Group::class.java) } ?: emptyList()
                     groups.clear()
-                    val sortedGroups = snapshot?.documents?.mapNotNull { it.toObject(Group::class.java) }
-                        ?.sortedByDescending { it.timestamp } ?: emptyList()
-                    groups.addAll(sortedGroups.take(3))
+                    groups.addAll(fetchedGroups.sortedByDescending { it.timestamp }.take(3))
+                    
+                    listenToRecentFiles(fetchedGroups.map { it.id }, context = context)
                 }
         }
 
@@ -66,13 +86,68 @@ class HomeViewModel : ViewModel() {
         }
     }
 
+    private fun listenToRecentFiles(groupIds: List<String>, useOrdering: Boolean = true, context: Context? = null) {
+        filesListener?.remove()
+        if (groupIds.isEmpty()) {
+            recentFiles.clear()
+            syncStatus.value = "No groups found."
+            return
+        }
+
+        syncStatus.value = "Fetching group files..."
+        val limitedGroupIds = groupIds.take(30)
+        
+        var query = db.collection("shared_files").whereIn("groupId", limitedGroupIds)
+        if (useOrdering) {
+            query = query.orderBy("timestamp", Query.Direction.DESCENDING).limit(5)
+        }
+        
+        filesListener = query.addSnapshotListener { snapshot, e ->
+            if (e != null) {
+                if (e.code == FirebaseFirestoreException.Code.FAILED_PRECONDITION && useOrdering) {
+                    syncStatus.value = "Index building... (fallback active)"
+                    Log.e("TEAMNEST_DEBUG", "HOME INDEX MISSING! Falling back...")
+                    listenToRecentFiles(groupIds, false, context)
+                } else {
+                    syncStatus.value = "File Error: ${e.code}"
+                    Log.e("TEAMNEST_DEBUG", "HOME FILES ERROR: ${e.message}")
+                }
+                return@addSnapshotListener
+            }
+            val fetched = snapshot?.toObjects(SharedFile::class.java) ?: emptyList()
+            syncStatus.value = "Connected: ${fetched.size} files found"
+            Log.e("TEAMNEST_DEBUG", "HOME SYNC SUCCESS: Received ${fetched.size} files")
+            
+            recentFiles.clear()
+            recentFiles.addAll(if (!useOrdering) fetched.sortedByDescending { it.timestamp }.take(5) else fetched)
+        }
+    }
+
+    fun downloadFile(context: Context, file: SharedFile) {
+        try {
+            val request = DownloadManager.Request(file.url.toUri())
+                .setTitle(file.name)
+                .setDescription("Downloading from TeamNest")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, file.name)
+            
+            val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+            manager.enqueue(request)
+            Toast.makeText(context, "Downloading...", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(context, "Download failed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun stopListening() {
         tasksListener?.remove()
         groupsListener?.remove()
         invitationsListener?.remove()
+        filesListener?.remove()
         tasksListener = null
         groupsListener = null
         invitationsListener = null
+        filesListener = null
     }
 
     fun acceptInvitation(invite: Invitation, onResult: (Boolean, String?) -> Unit) {
@@ -103,10 +178,6 @@ class HomeViewModel : ViewModel() {
         db.collection("invitations").document(inviteId).update("status", "DECLINED")
             .addOnSuccessListener { onResult(true, null) }
             .addOnFailureListener { onResult(false, it.message) }
-    }
-
-    fun markTaskComplete(taskId: String) {
-        db.collection("tasks").document(taskId).update("isCompleted", true)
     }
 
     override fun onCleared() {

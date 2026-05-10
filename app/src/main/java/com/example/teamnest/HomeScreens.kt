@@ -1,5 +1,8 @@
 package com.example.teamnest
 
+import android.content.Intent
+import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -11,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -21,12 +25,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -45,6 +53,9 @@ fun HomeScreen(
     val tasks = homeViewModel.tasks
     val groups = homeViewModel.groups
     val invitations = homeViewModel.invitations
+    val recentFiles = homeViewModel.recentFiles
+    val syncStatus by homeViewModel.syncStatus // Get sync status from VM
+    
     val currentUserId = authViewModel.currentUser.value?.uid ?: ""
     val currentUserEmail = authViewModel.currentUser.value?.email ?: ""
     var showMembers by remember { mutableStateOf(false) }
@@ -65,6 +76,37 @@ fun HomeScreen(
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
+        // Sync Status Banner
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = if (syncStatus.contains("Error") || syncStatus.contains("Missing")) 
+                            MaterialTheme.colorScheme.errorContainer 
+                        else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (syncStatus.contains("Synced")) Icons.Default.CloudDone else Icons.Default.Sync,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = if (syncStatus.contains("Error")) Color.Red else Color.Gray
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text = syncStatus.uppercase(),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 1.sp,
+                        color = if (syncStatus.contains("Error")) Color.Red else Color.Gray
+                    )
+                }
+            }
+        }
+
         // Welcome Dashboard Widget
         item {
             Card(
@@ -192,6 +234,23 @@ fun HomeScreen(
             }
         }
 
+        // Recent Shared Files Widget
+        if (recentFiles.isNotEmpty()) {
+            item {
+                HomeWidget(
+                    title = "RECENT SHARED FILES",
+                    icon = Icons.Default.CloudDownload,
+                    iconColor = Color(0xFF4CAF50)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        recentFiles.forEach { file ->
+                            RecentFileCard(file, homeViewModel)
+                        }
+                    }
+                }
+            }
+        }
+
         // Recent Groups Widget
         item {
             HomeWidget(
@@ -280,6 +339,77 @@ fun HomeScreen(
                 showInviteDialog = false
             }
         )
+    }
+}
+
+@Composable
+fun RecentFileCard(file: SharedFile, homeViewModel: HomeViewModel) {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(file.url))
+                context.startActivity(intent)
+            },
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (file.type.contains("image")) {
+                    AsyncImage(
+                        model = file.url,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = when {
+                            file.type.contains("pdf") -> Icons.Default.PictureAsPdf
+                            else -> Icons.AutoMirrored.Filled.InsertDriveFile
+                        },
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = file.name,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Shared by ${file.sender}",
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+            }
+            IconButton(onClick = { homeViewModel.downloadFile(context, file) }) {
+                Icon(
+                    imageVector = Icons.Default.Download,
+                    contentDescription = "Download",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
     }
 }
 

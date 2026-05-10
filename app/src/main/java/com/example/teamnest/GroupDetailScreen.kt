@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import coil.compose.AsyncImage
 import com.example.teamnest.ui.theme.LocalIsDarkTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -45,9 +47,10 @@ fun GroupDetailScreen(
     var showEditDialog by remember { mutableStateOf(false) }
     val currentUserUid = authViewModel.currentUser.value?.uid
     val context = LocalContext.current
+    val syncStatus by detailViewModel.syncStatus
 
     LaunchedEffect(groupId) {
-        detailViewModel.listenToGroup(groupId)
+        detailViewModel.listenToGroup(groupId, context)
     }
 
     group?.let { g ->
@@ -81,6 +84,22 @@ fun GroupDetailScreen(
             }
         ) { p ->
             Column(modifier = Modifier.padding(p)) {
+                // Sync Status Indicator for Group Screen
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+                    color = if (syncStatus.contains("Error")) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = syncStatus.uppercase(),
+                        modifier = Modifier.padding(8.dp),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        color = if (syncStatus.contains("Error")) Color.Red else MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 TabRow(
                     selectedTabIndex = selectedTab, 
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -351,36 +370,80 @@ fun GroupFilesTab(group: Group, detailViewModel: GroupDetailViewModel) {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(files) { file ->
                     Card(
-                        modifier = Modifier.fillMaxWidth().clickable {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(file.url))
-                            context.startActivity(intent)
-                        },
+                        modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                     ) {
                         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // File Icon or Image Preview
                             Box(
-                                modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                                modifier = Modifier
+                                    .size(60.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                                    .clickable {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(file.url))
+                                        context.startActivity(intent)
+                                    },
                                 contentAlignment = Alignment.Center
                             ) {
+                                if (file.type.contains("image")) {
+                                    AsyncImage(
+                                        model = file.url,
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = when {
+                                            file.type.contains("pdf") -> Icons.Default.PictureAsPdf
+                                            else -> Icons.AutoMirrored.Filled.InsertDriveFile
+                                        },
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                            }
+                            
+                            Spacer(modifier = Modifier.width(16.dp))
+                            
+                            Column(modifier = Modifier.weight(1f).clickable {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(file.url))
+                                context.startActivity(intent)
+                            }) {
+                                Text(
+                                    text = file.name, 
+                                    fontWeight = FontWeight.Bold, 
+                                    color = MaterialTheme.colorScheme.onSurface, 
+                                    maxLines = 1, 
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "Shared by ${file.sender}", 
+                                    fontSize = 12.sp, 
+                                    color = Color.Gray, 
+                                    fontWeight = FontWeight.Medium
+                                )
+                                if (file.timestamp > 0) {
+                                    Text(
+                                        text = formatTimestamp(file.timestamp),
+                                        fontSize = 11.sp,
+                                        color = Color.LightGray
+                                    )
+                                }
+                            }
+                            
+                            // Download Button
+                            IconButton(onClick = { detailViewModel.downloadFile(context, file) }) {
                                 Icon(
-                                    imageVector = when {
-                                        file.type.contains("pdf") -> Icons.Default.PictureAsPdf
-                                        file.type.contains("image") -> Icons.Default.Image
-                                        else -> Icons.AutoMirrored.Filled.InsertDriveFile
-                                    },
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
+                                    imageVector = Icons.Default.Download, 
+                                    contentDescription = "Download", 
+                                    tint = MaterialTheme.colorScheme.primary
                                 )
                             }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(file.name, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text("Shared by ${file.sender}", fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
-                            }
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Color.LightGray)
                         }
                     }
                 }

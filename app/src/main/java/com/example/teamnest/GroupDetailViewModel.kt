@@ -1,22 +1,29 @@
 package com.example.teamnest
 
+import android.app.DownloadManager
 import android.content.Context
 import android.net.Uri
+import android.os.Environment
+import android.provider.OpenableColumns
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
-import com.google.firebase.storage.FirebaseStorage
+import io.github.jan.supabase.storage.storage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class GroupDetailViewModel : ViewModel() {
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
-    private val storage = FirebaseStorage.getInstance()
 
     val group = mutableStateOf<Group?>(null)
     val tasks = mutableStateListOf<Task>()
@@ -24,13 +31,19 @@ class GroupDetailViewModel : ViewModel() {
     val ideas = mutableStateListOf<Idea>()
     val isUploading = mutableStateOf(false)
     val isPostingIdea = mutableStateOf(false)
+    
+    // UI Status
+    val syncStatus = mutableStateOf("Initializing sync...")
 
     private var groupListener: ListenerRegistration? = null
     private var tasksListener: ListenerRegistration? = null
     private var filesListener: ListenerRegistration? = null
     private var ideasListener: ListenerRegistration? = null
 
-    fun listenToGroup(groupId: String) {
+    fun listenToGroup(groupId: String, context: Context? = null) {
+        syncStatus.value = "Connecting to group..."
+        Log.e("TEAMNEST_DEBUG", "STARTING SYNC: $groupId")
+        
         groupListener?.remove()
         groupListener = db.collection("groups").document(groupId).addSnapshotListener { s, _ ->
             group.value = s?.toObject(Group::class.java)
@@ -43,26 +56,12 @@ class GroupDetailViewModel : ViewModel() {
             tasks.addAll(sortedTasks)
         }
 
-        filesListener?.remove()
-        filesListener = db.collection("shared_files").whereEqualTo("groupId", groupId)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .addSnapshotListener { s, e ->
-                if (e != null) {
-                    Log.e("FirestoreError", "Files query failed: ${e.message}")
-                    return@addSnapshotListener
-                }
-                files.clear()
-                s?.toObjects(SharedFile::class.java)?.let { files.addAll(it) }
-            }
+        startFilesListener(groupId, true)
 
-        // Using in-memory sorting to avoid Firestore Index requirement for simpler setup
         ideasListener?.remove()
         ideasListener = db.collection("ideas").whereEqualTo("groupId", groupId)
             .addSnapshotListener { snapshot, e ->
-                if (e != null) {
-                    Log.e("FirestoreError", "Ideas query failed: ${e.message}")
-                    return@addSnapshotListener
-                }
+                if (e != null) return@addSnapshotListener
                 val sortedIdeas = snapshot?.documents?.mapNotNull { it.toObject(Idea::class.java) }
                     ?.sortedByDescending { it.timestamp } ?: emptyList()
                 ideas.clear()
@@ -70,40 +69,128 @@ class GroupDetailViewModel : ViewModel() {
             }
     }
 
-    fun updateGroupDetails(context: Context, groupId: String, newName: String, newDescription: String, onComplete: () -> Unit) {
-        if (newName.isBlank()) {
-            Toast.makeText(context, "Group name cannot be empty", Toast.LENGTH_SHORT).show()
-            return
+    private fun startFilesListener(groupId: String, useOrdering: Boolean) {
+        filesListener?.remove()
+        val query = if (useOrdering) {
+            db.collection("shared_files")
+                .whereEqualTo("groupId", groupId)
+                .orderBy("timestamp", Query.Direction.DESCENDING)
+        } else {
+            db.collection("shared_files")
+                .whereEqualTo("groupId", groupId)
         }
-        db.collection("groups").document(groupId)
-            .update(mapOf(
-                "name" to newName.trim(),
-                "description" to newDescription.trim()
-            ))
-            .addOnSuccessListener {
-                Toast.makeText(context, "Group updated successfully", Toast.LENGTH_SHORT).show()
-                onComplete()
+
+        filesListener = query.addSnapshotListener { s, e ->
+            if (e != null) {
+                if (e.code == FirebaseFirestoreException.Code.FAILED_PRECONDITION && useOrdering) {
+                    syncStatus.value = "Indexing... (Fallback order)"
+                    Log.e("TEAMNEST_DEBUG", "MISSING INDEX: Visit Firebase Console to fix.")
+                    startFilesListener(groupId, false)
+                } else {
+                    syncStatus.value = "Sync Error: ${e.code}"
+                    Log.e("TEAMNEST_DEBUG", "FILES ERROR: ${e.message}")
+                }
+                return@addSnapshotListener
             }
-            .addOnFailureListener {
-                Toast.makeText(context, "Error updating group: ${it.message}", Toast.LENGTH_SHORT).show()
+            
+            val fetchedFiles = s?.toObjects(SharedFile::class.java) ?: emptyList()
+            syncStatus.value = "Synced: ${fetchedFiles.size} files found"
+            Log.e("TEAMNEST_DEBUG", "FOUND ${fetchedFiles.size} FILES")
+            
+            files.clear()
+            if (!useOrdering) {
+                files.addAll(fetchedFiles.sortedByDescending { it.timestamp })
+            } else {
+                files.addAll(fetchedFiles)
             }
+        }
+    }
+
+    private fun getFileName(context: Context, uri: Uri): String? {
+        var name: String? = null
+        if (uri.scheme == "content") {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) name = it.getString(nameIndex)
+                }
+            }
+        }
+        return name ?: uri.path?.substringAfterLast('/')
+    }
+
+    fun uploadFile(groupId: String, uri: Uri, context: Context) {
+        val userEmail = auth.currentUser?.email?.lowercase() ?: "Unknown"
+        
+        viewModelScope.launch {
+            isUploading.value = true
+            syncStatus.value = "Uploading to storage..."
+            try {
+                val rawFileName = getFileName(context, uri) ?: "file_${System.currentTimeMillis()}"
+                val fileName = rawFileName.replace(":", "_").replace(" ", "_")
+                
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bytes = inputStream?.readBytes() ?: throw Exception("Could not read file")
+                inputStream.close()
+
+                val bucket = SupabaseConfig.client.storage.from("teamnest-files")
+                val path = "$groupId/$fileName"
+                
+                bucket.upload(path, bytes) { upsert = true }
+                val publicUrl = bucket.publicUrl(path)
+                
+                syncStatus.value = "Sharing with group..."
+                val fileRef = db.collection("shared_files").document()
+                val sharedFile = SharedFile(
+                    id = fileRef.id,
+                    groupId = groupId,
+                    name = fileName,
+                    url = publicUrl,
+                    type = context.contentResolver.getType(uri) ?: "unknown",
+                    sender = userEmail,
+                    timestamp = System.currentTimeMillis()
+                )
+                
+                fileRef.set(sharedFile).addOnSuccessListener {
+                    Toast.makeText(context, "File shared!", Toast.LENGTH_SHORT).show()
+                }.addOnFailureListener {
+                    syncStatus.value = "Sharing failed: ${it.message}"
+                }
+                
+            } catch (e: Exception) {
+                Log.e("TEAMNEST_DEBUG", "UPLOAD FAILED: ${e.message}")
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Upload failed", Toast.LENGTH_SHORT).show()
+                }
+            } finally {
+                isUploading.value = false
+            }
+        }
+    }
+
+    fun downloadFile(context: Context, file: SharedFile) {
+        try {
+            val request = DownloadManager.Request(Uri.parse(file.url))
+                .setTitle(file.name)
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, file.name)
+            (context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager).enqueue(request)
+            Toast.makeText(context, "Downloading...", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(context, "Download failed", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun updateGroupDetails(context: Context, groupId: String, newName: String, newDescription: String, onComplete: () -> Unit) {
+        db.collection("groups").document(groupId).update(mapOf("name" to newName.trim(), "description" to newDescription.trim()))
+            .addOnSuccessListener { onComplete() }
     }
 
     fun createTask(context: Context, group: Group, title: String, description: String, email: String, deadline: String, onComplete: () -> Unit) {
-        val assigneeEmail = email.trim().lowercase()
-        if (group.memberEmails.any { it.equals(assigneeEmail, ignoreCase = true) }) {
-            val ref = db.collection("tasks").document()
-            val newTask = Task(ref.id, group.id, group.name, title, description, deadline, assigneeEmail, false, System.currentTimeMillis())
-            ref.set(newTask).addOnSuccessListener {
-                sendTaskEmail(context, email, title, group.name, deadline)
-                Toast.makeText(context, "Task created successfully", Toast.LENGTH_SHORT).show()
-                onComplete()
-            }.addOnFailureListener {
-                Toast.makeText(context, "Error creating task: ${it.message}", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(context, "Error: Assignee '$assigneeEmail' is not a member of this group.", Toast.LENGTH_LONG).show()
-        }
+        val ref = db.collection("tasks").document()
+        val newTask = Task(ref.id, group.id, group.name, title, description, deadline, email.trim().lowercase(), false, System.currentTimeMillis())
+        ref.set(newTask).addOnSuccessListener { onComplete() }
     }
 
     fun updateTaskCompletion(taskId: String, isCompleted: Boolean) {
@@ -114,45 +201,10 @@ class GroupDetailViewModel : ViewModel() {
         db.collection("tasks").document(taskId).delete()
     }
 
-    fun uploadFile(groupId: String, uri: Uri, context: Context) {
-        isUploading.value = true
-        val fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "file_${System.currentTimeMillis()}"
-        val ref = storage.reference.child("group_files/$groupId/$fileName")
-        ref.putFile(uri).addOnSuccessListener {
-            ref.downloadUrl.addOnSuccessListener { url ->
-                val fileRef = db.collection("shared_files").document()
-                val type = context.contentResolver.getType(uri) ?: "unknown"
-                val sharedFile = SharedFile(
-                    fileRef.id, groupId, fileName, url.toString(), type,
-                    auth.currentUser?.email ?: "", System.currentTimeMillis()
-                )
-                fileRef.set(sharedFile)
-                isUploading.value = false
-            }
-        }.addOnFailureListener { isUploading.value = false }
-    }
-
     fun postIdea(context: Context, groupId: String, content: String, authorName: String, onSuccess: () -> Unit) {
-        if (content.isBlank()) return
-        isPostingIdea.value = true
         val ref = db.collection("ideas").document()
-        val idea = Idea(
-            id = ref.id,
-            groupId = groupId,
-            content = content.trim(),
-            author = authorName,
-            timestamp = System.currentTimeMillis(),
-            likes = emptyList()
-        )
-        ref.set(idea).addOnSuccessListener {
-            isPostingIdea.value = false
-            onSuccess()
-            Toast.makeText(context, "Idea shared successfully!", Toast.LENGTH_SHORT).show()
-        }.addOnFailureListener {
-            isPostingIdea.value = false
-            Log.e("FirestoreError", "Error sharing idea", it)
-            Toast.makeText(context, "Failed to share idea: ${it.message}", Toast.LENGTH_SHORT).show()
-        }
+        val idea = Idea(ref.id, groupId, content.trim(), authorName, System.currentTimeMillis(), emptyList())
+        ref.set(idea).addOnSuccessListener { onSuccess() }
     }
 
     fun toggleLike(idea: Idea) {

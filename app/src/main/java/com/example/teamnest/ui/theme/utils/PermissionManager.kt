@@ -1,4 +1,4 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.utils
 
 import android.Manifest
 import android.content.pm.PackageManager

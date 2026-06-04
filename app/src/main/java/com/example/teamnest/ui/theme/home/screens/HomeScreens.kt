@@ -1,11 +1,10 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.home.screens
 
 import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -13,7 +12,6 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AssignmentLate
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -27,6 +25,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.teamnest.ui.theme.data.Group
+import com.example.teamnest.ui.theme.Groups.Viewmodel.GroupsViewModel
+import com.example.teamnest.ui.theme.home.screens.viewmodel.HomeViewModel
+import com.example.teamnest.ui.theme.data.Invitation
+import com.example.teamnest.ui.theme.authentication.viewModel.AuthViewModel
+import com.example.teamnest.ui.theme.components.GroupCard
+import com.example.teamnest.ui.theme.components.MembersDialog
+import com.example.teamnest.ui.theme.components.UrgentTaskCard
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -163,7 +169,11 @@ fun HomeScreen(
                                 g = g,
                                 currentUserId = currentUserId,
                                 onViewMembers = {
-                                    groupsViewModel.fetchGroupMembers(g.memberEmails, g.leaderId, g.coLeaderEmails)
+                                    groupsViewModel.fetchGroupMembers(
+                                        g.memberEmails,
+                                        g.leaderId,
+                                        g.coLeaderEmails
+                                    )
                                     selectedGroupForMembers = g
                                     showMembers = true
                                 },
@@ -182,20 +192,36 @@ fun HomeScreen(
             isCurrentUserLeader = selectedGroupForMembers!!.leaderId == currentUserId,
             currentUserId = currentUserId,
             onRemoveMember = { member ->
-                groupsViewModel.removeMember(selectedGroupForMembers!!.id, member.email) { success, msg ->
+                groupsViewModel.removeMember(
+                    selectedGroupForMembers!!.id,
+                    member.email
+                ) { success, msg ->
                     if (success) {
-                        val updatedEmails = selectedGroupForMembers!!.memberEmails.filter { it != member.email }
-                        groupsViewModel.fetchGroupMembers(updatedEmails, selectedGroupForMembers!!.leaderId, selectedGroupForMembers!!.coLeaderEmails)
+                        val updatedEmails =
+                            selectedGroupForMembers!!.memberEmails.filter { it != member.email }
+                        groupsViewModel.fetchGroupMembers(
+                            updatedEmails,
+                            selectedGroupForMembers!!.leaderId,
+                            selectedGroupForMembers!!.coLeaderEmails
+                        )
                     } else {
                         Toast.makeText(context, msg ?: "Error", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
             onPromoteToLeader = { member ->
-                groupsViewModel.promoteToLeader(selectedGroupForMembers!!.id, member.email) { success, msg ->
+                groupsViewModel.promoteToLeader(
+                    selectedGroupForMembers!!.id,
+                    member.email
+                ) { success, msg ->
                     if (success) {
-                        val updatedCoLeaders = (selectedGroupForMembers!!.coLeaderEmails + member.email.lowercase()).distinct()
-                        groupsViewModel.fetchGroupMembers(selectedGroupForMembers!!.memberEmails, selectedGroupForMembers!!.leaderId, updatedCoLeaders)
+                        val updatedCoLeaders =
+                            (selectedGroupForMembers!!.coLeaderEmails + member.email.lowercase()).distinct()
+                        groupsViewModel.fetchGroupMembers(
+                            selectedGroupForMembers!!.memberEmails,
+                            selectedGroupForMembers!!.leaderId,
+                            updatedCoLeaders
+                        )
                     } else {
                         Toast.makeText(context, msg ?: "Error", Toast.LENGTH_SHORT).show()
                     }

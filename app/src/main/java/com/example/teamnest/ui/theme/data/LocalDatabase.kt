@@ -1,10 +1,10 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.data
 
 import android.content.Context
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 
-@Entity(tableName = "user_preferences")
+@Entity(tableName = "user_preferences")is
 data class UserPreferences(
     @PrimaryKey val id: Int = 1,
     val isDarkTheme: Boolean = false,

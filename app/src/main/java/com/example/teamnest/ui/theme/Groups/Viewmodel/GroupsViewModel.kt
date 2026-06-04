@@ -1,10 +1,13 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.Groups.Viewmodel
 
 import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
+import com.example.teamnest.ui.theme.data.Group
+import com.example.teamnest.ui.theme.data.Invitation
+import com.example.teamnest.ui.theme.data.UserProfile
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration

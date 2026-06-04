@@ -1,8 +1,8 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.components
 
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Patterns
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,6 +38,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.teamnest.ui.theme.data.Group
+import com.example.teamnest.ui.theme.Groups.Viewmodel.MemberDetail
+import com.example.teamnest.ui.theme.data.Task
 import java.time.LocalDate
 
 @Composable
@@ -121,9 +124,9 @@ fun TaskCard(t: Task, isCompleted: Boolean = false, onClick: () -> Unit) {
 
 @Composable
 fun GroupCard(
-    g: Group, 
-    currentUserId: String, 
-    onViewMembers: () -> Unit, 
+    g: Group,
+    currentUserId: String,
+    onViewMembers: () -> Unit,
     onDeleteGroup: (() -> Unit)? = null, // Callback for deletion
     onClick: () -> Unit
 ) {
@@ -437,7 +440,7 @@ fun AddTaskDialog(onDismiss: () -> Unit, onConfirm: (String, String, String, Str
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                if (t.isNotBlank() && e.isNotBlank() && android.util.Patterns.EMAIL_ADDRESS.matcher(e.trim()).matches()) {
+                if (t.isNotBlank() && e.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(e.trim()).matches()) {
                     onConfirm(t, d, e, dl)
                 } else if (t.isBlank()) {
                     Toast.makeText(context, "Please enter a task title", Toast.LENGTH_SHORT).show()
@@ -502,7 +505,7 @@ fun EditTaskDialog(task: Task, onDismiss: () -> Unit, onConfirm: (String, String
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                if (t.isNotBlank() && e.isNotBlank() && android.util.Patterns.EMAIL_ADDRESS.matcher(e.trim()).matches()) {
+                if (t.isNotBlank() && e.isNotBlank() && Patterns.EMAIL_ADDRESS.matcher(e.trim()).matches()) {
                     onConfirm(t, d, e, dl)
                 } else if (t.isBlank()) {
                     Toast.makeText(context, "Please enter a task title", Toast.LENGTH_SHORT).show()

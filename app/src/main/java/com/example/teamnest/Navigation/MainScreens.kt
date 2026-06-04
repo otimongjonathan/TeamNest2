@@ -1,4 +1,4 @@
-package com.example.teamnest
+package com.example.teamnest.Navigation
 
 import android.widget.Toast
 import androidx.compose.animation.Crossfade
@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -24,6 +25,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.teamnest.ui.theme.data.Group
+import com.example.teamnest.ui.theme.reminders.viewmodel.RemindersViewModel
+import com.example.teamnest.ui.theme.data.Task
+import com.example.teamnest.ui.theme.Groups.Viewmodel.GroupsViewModel
+import com.example.teamnest.ui.theme.authentication.viewModel.AuthViewModel
+import com.example.teamnest.ui.theme.components.AddTaskDialog
+import com.example.teamnest.ui.theme.components.CreateGroupDialog
+import com.example.teamnest.ui.theme.components.DeleteGroupDialog
+import com.example.teamnest.ui.theme.components.EditTaskDialog
+import com.example.teamnest.ui.theme.components.GroupCard
+import com.example.teamnest.ui.theme.components.InviteMemberDialog
+import com.example.teamnest.ui.theme.components.JoinGroupDialog
+import com.example.teamnest.ui.theme.components.MembersDialog
+import com.example.teamnest.ui.theme.components.TaskCard
+import com.example.teamnest.ui.theme.components.UserAvatar
+import com.example.teamnest.ui.theme.home.screens.HomeScreen
+import com.example.teamnest.ui.theme.tasks.viewmodel.TasksViewModel
 
 @Composable
 fun MainScreenWithBottomNav(
@@ -292,7 +310,7 @@ fun ManageTasksTab(tasksViewModel: TasksViewModel = viewModel(), authViewModel: 
                 }
 
                 if (tasks.isEmpty()) {
-                    item { Text("No tasks yet.", color = Color.Gray, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic) }
+                    item { Text("No tasks yet.", color = Color.Gray, fontStyle = FontStyle.Italic) }
                 } else {
                     items(tasks) { task ->
                         Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), shape = RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))) {
@@ -413,7 +431,11 @@ fun GroupsScreen(navController: NavController, groupsViewModel: GroupsViewModel 
                     g = g,
                     currentUserId = currentUserId,
                     onViewMembers = {
-                        groupsViewModel.fetchGroupMembers(g.memberEmails, g.leaderId, g.coLeaderEmails)
+                        groupsViewModel.fetchGroupMembers(
+                            g.memberEmails,
+                            g.leaderId,
+                            g.coLeaderEmails
+                        )
                         selectedGroupForMembers = g
                         showMembers = true
                     },
@@ -435,12 +457,16 @@ fun GroupsScreen(navController: NavController, groupsViewModel: GroupsViewModel 
         })
     }
 
-    if (showJoin) JoinGroupDialog(onDismiss = { showJoin = false }, onConfirm = { code -> 
+    if (showJoin) JoinGroupDialog(onDismiss = { showJoin = false }, onConfirm = { code ->
         groupsViewModel.joinGroupByCode(code) { success, msg ->
             if (success) {
                 showJoin = false
             }
-            Toast.makeText(context, msg ?: (if (success) "Joined!" else "Error"), Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                msg ?: (if (success) "Joined!" else "Error"),
+                Toast.LENGTH_SHORT
+            ).show()
         }
     })
     
@@ -450,20 +476,36 @@ fun GroupsScreen(navController: NavController, groupsViewModel: GroupsViewModel 
             isCurrentUserLeader = selectedGroupForMembers!!.leaderId == currentUserId,
             currentUserId = currentUserId,
             onRemoveMember = { member ->
-                groupsViewModel.removeMember(selectedGroupForMembers!!.id, member.email) { success, msg ->
+                groupsViewModel.removeMember(
+                    selectedGroupForMembers!!.id,
+                    member.email
+                ) { success, msg ->
                     if (success) {
-                        val updatedEmails = selectedGroupForMembers!!.memberEmails.filter { it != member.email }
-                        groupsViewModel.fetchGroupMembers(updatedEmails, selectedGroupForMembers!!.leaderId, selectedGroupForMembers!!.coLeaderEmails)
+                        val updatedEmails =
+                            selectedGroupForMembers!!.memberEmails.filter { it != member.email }
+                        groupsViewModel.fetchGroupMembers(
+                            updatedEmails,
+                            selectedGroupForMembers!!.leaderId,
+                            selectedGroupForMembers!!.coLeaderEmails
+                        )
                     } else {
                         Toast.makeText(context, msg ?: "Error", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
             onPromoteToLeader = { member ->
-                groupsViewModel.promoteToLeader(selectedGroupForMembers!!.id, member.email) { success, msg ->
+                groupsViewModel.promoteToLeader(
+                    selectedGroupForMembers!!.id,
+                    member.email
+                ) { success, msg ->
                     if (success) {
-                        val updatedCoLeaders = (selectedGroupForMembers!!.coLeaderEmails + member.email.lowercase()).distinct()
-                        groupsViewModel.fetchGroupMembers(selectedGroupForMembers!!.memberEmails, selectedGroupForMembers!!.leaderId, updatedCoLeaders)
+                        val updatedCoLeaders =
+                            (selectedGroupForMembers!!.coLeaderEmails + member.email.lowercase()).distinct()
+                        groupsViewModel.fetchGroupMembers(
+                            selectedGroupForMembers!!.memberEmails,
+                            selectedGroupForMembers!!.leaderId,
+                            updatedCoLeaders
+                        )
                     } else {
                         Toast.makeText(context, msg ?: "Error", Toast.LENGTH_SHORT).show()
                     }
@@ -481,7 +523,8 @@ fun GroupsScreen(navController: NavController, groupsViewModel: GroupsViewModel 
                 groupsViewModel.deleteGroup(groupToDelete!!.id) { success, msg ->
                     showDeleteDialog = false
                     if (!success) {
-                        Toast.makeText(context, msg ?: "Error deleting group", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, msg ?: "Error deleting group", Toast.LENGTH_SHORT)
+                            .show()
                     }
                 }
             }

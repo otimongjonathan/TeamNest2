@@ -1,4 +1,4 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.data
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.google.firebase.firestore.PropertyName

@@ -1,9 +1,10 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.authentication.viewModel
 
 import android.util.Log
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import com.example.teamnest.ui.theme.data.UserProfile
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
@@ -23,7 +24,7 @@ class AuthViewModel : ViewModel() {
     val isLoading: State<Boolean> = _isLoading
 
     init {
-        _currentUser.value?.uid?.let { 
+        _currentUser.value?.uid?.let {
             fetchUserProfile(it)
             updateFcmToken()
         }
@@ -64,7 +65,7 @@ class AuthViewModel : ViewModel() {
                 _isLoading.value = false
                 if (task.isSuccessful) {
                     _currentUser.value = auth.currentUser
-                    _currentUser.value?.uid?.let { 
+                    _currentUser.value?.uid?.let {
                         fetchUserProfile(it)
                         updateFcmToken()
                     }
@@ -88,8 +89,8 @@ class AuthViewModel : ViewModel() {
             onResult(false, "Passwords do not match")
             return
         }
-        if (trimmedPassword.length < 6) {
-            onResult(false, "Password should be at least 6 characters")
+        if (trimmedPassword.length < 8) {
+            onResult(false, "Password must be at least 8 characters")
             return
         }
 
@@ -103,7 +104,7 @@ class AuthViewModel : ViewModel() {
                         .addOnSuccessListener {
                             _isLoading.value = false
                             _currentUser.value = auth.currentUser
-                            _currentUser.value?.uid?.let { 
+                            _currentUser.value?.uid?.let {
                                 fetchUserProfile(it)
                                 updateFcmToken()
                             }

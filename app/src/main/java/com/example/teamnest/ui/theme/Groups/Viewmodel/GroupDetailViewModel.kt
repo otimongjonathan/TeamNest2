@@ -1,4 +1,4 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.Groups.Viewmodel
 
 import android.content.Context
 import android.net.Uri
@@ -7,6 +7,11 @@ import android.widget.Toast
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import com.example.teamnest.ui.theme.data.Group
+import com.example.teamnest.ui.theme.data.Idea
+import com.example.teamnest.ui.theme.data.SharedFile
+import com.example.teamnest.ui.theme.data.Task
+import com.example.teamnest.ui.theme.utils.sendTaskEmail
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -73,7 +78,16 @@ class GroupDetailViewModel : ViewModel() {
         val assigneeEmail = email.trim().lowercase()
         if (group.memberEmails.any { it.equals(assigneeEmail, ignoreCase = true) }) {
             val ref = db.collection("tasks").document()
-            val newTask = Task(ref.id, group.id, group.name, title, description, deadline, assigneeEmail, false)
+            val newTask = Task(
+                ref.id,
+                group.id,
+                group.name,
+                title,
+                description,
+                deadline,
+                assigneeEmail,
+                false
+            )
             ref.set(newTask).addOnSuccessListener {
                 sendTaskEmail(context, email, title, group.name, deadline)
                 Toast.makeText(context, "Task created successfully", Toast.LENGTH_SHORT).show()

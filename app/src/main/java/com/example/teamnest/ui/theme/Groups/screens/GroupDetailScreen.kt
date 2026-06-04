@@ -1,4 +1,4 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.Groups.screens
 
 import android.content.Intent
 import android.net.Uri
@@ -21,7 +21,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -30,6 +29,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.teamnest.ui.theme.data.Group
+import com.example.teamnest.ui.theme.Groups.Viewmodel.GroupDetailViewModel
+import com.example.teamnest.ui.theme.authentication.viewModel.AuthViewModel
+import com.example.teamnest.ui.theme.components.AddTaskDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

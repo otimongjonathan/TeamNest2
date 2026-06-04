@@ -1,3 +1,9 @@
 <resources>
-    <string name="app_name">teamnest</string>
+    <string name="app_name">Teamnest</string>
+    <string name="share_ideas">Brainstorm, upload files, and build amazing projects together.</string>
+    <string name="stay_organized">Assign tasks, set deadlines, and receive email reminders to stay on track.</string>
+    <string name="collaborate">We centralise your communication, file sharing, and task management all in one place.</string>
+    <string name="create_account">CREATE ACCOUNT</string>
+    <string name="password">PASSWORD</string>
+    <string name="email">EMAIL</string>
 </resources>

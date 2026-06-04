@@ -1,5 +1,6 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.reminders.viewmodel
 
+import android.R
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -7,6 +8,7 @@ import android.os.Build
 import androidx.compose.runtime.mutableStateListOf
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.ViewModel
+import com.example.teamnest.ui.theme.data.Task
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
@@ -19,7 +21,7 @@ class RemindersViewModel : ViewModel() {
 
     val reminderTasks = mutableStateListOf<Task>()
     private var tasksListener: ListenerRegistration? = null
-    
+
     private val notifiedTaskIds = mutableSetOf<String>()
 
     fun startListening(context: Context) {
@@ -41,7 +43,7 @@ class RemindersViewModel : ViewModel() {
                         false
                     }
                 }
-                
+
                 urgentTasks.forEach { task ->
                     if (!notifiedTaskIds.contains(task.id)) {
                         showNotification(context, task)
@@ -57,11 +59,11 @@ class RemindersViewModel : ViewModel() {
     private fun showNotification(context: Context, task: Task) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channelId = "urgent_tasks"
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                channelId, 
-                "Urgent Tasks", 
+                channelId,
+                "Urgent Tasks",
                 NotificationManager.IMPORTANCE_HIGH
             )
             notificationManager.createNotificationChannel(channel)
@@ -70,7 +72,7 @@ class RemindersViewModel : ViewModel() {
         val notification = NotificationCompat.Builder(context, channelId)
             .setContentTitle("Urgent Task: ${task.title}")
             .setContentText("Due on ${task.deadline} in ${task.groupName}")
-            .setSmallIcon(android.R.drawable.ic_dialog_info) // Standard reliable icon
+            .setSmallIcon(R.drawable.ic_dialog_info) // Standard reliable icon
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()

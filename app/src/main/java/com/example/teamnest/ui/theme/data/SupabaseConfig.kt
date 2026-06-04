@@ -1,8 +1,4 @@
-package com.example.teamnest
-
-import io.github.jan.supabase.createSupabaseClient
-import io.github.jan.supabase.postgrest.Postgrest
-import io.github.jan.supabase.storage.Storage
+package com.example.teamnest.ui.theme.data
 
 object SupabaseConfig {
     private const val SUPABASE_URL = "https://gneoqekamvqplyibrano.supabase.co"

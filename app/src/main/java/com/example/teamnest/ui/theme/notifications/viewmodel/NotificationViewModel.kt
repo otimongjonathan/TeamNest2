@@ -1,4 +1,4 @@
-package com.example.teamnest
+package com.example.teamnest.ui.theme.notifications.viewmodel
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,6 +10,14 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.teamnest.ui.theme.data.AppDatabase
+import com.example.teamnest.ui.theme.data.Group
+import com.example.teamnest.ui.theme.data.Invitation
+import com.example.teamnest.MainActivity
+import com.example.teamnest.ui.theme.data.NotifiedNotification
+import com.example.teamnest.ui.theme.data.NotifiedNotificationDao
+import com.example.teamnest.R
+import com.example.teamnest.ui.theme.data.Task
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.DocumentChange
 import com.google.firebase.firestore.FirebaseFirestore
@@ -25,20 +33,20 @@ class NotificationViewModel : ViewModel() {
     private var invitationsListener: ListenerRegistration? = null
     private var tasksListener: ListenerRegistration? = null
     private var groupsListener: ListenerRegistration? = null
-    
+
     private var isInitialGroupsProcessed = false
     private var currentListeningEmail: String? = null
-    
+
     // Store previous group states to detect role changes
     private val previousCoLeaderStatus = mutableMapOf<String, Boolean>()
 
     fun startGlobalListening(context: Context) {
         val userEmail = auth.currentUser?.email?.lowercase() ?: return
         val appContext = context.applicationContext
-        val roomDb = AppDatabase.getDatabase(appContext).notifiedNotificationDao()
+        val roomDb = AppDatabase.Companion.getDatabase(appContext).notifiedNotificationDao()
 
         if (currentListeningEmail == userEmail) return
-        
+
         Log.d("Notifications", "Starting global listeners for $userEmail")
         stopAllListeners()
         currentListeningEmail = userEmail
@@ -62,11 +70,11 @@ class NotificationViewModel : ViewModel() {
                         if (invite != null) {
                             val notificationId = "invite_${invite.id}"
                             checkAndNotify(
-                                appContext, 
-                                roomDb, 
-                                notificationId, 
-                                "New Team Invitation!", 
-                                "You've been invited to join '${invite.groupName}' by ${invite.inviterEmail}", 
+                                appContext,
+                                roomDb,
+                                notificationId,
+                                "New Team Invitation!",
+                                "You've been invited to join '${invite.groupName}' by ${invite.inviterEmail}",
                                 invite.id.hashCode()
                             )
                         }
@@ -82,13 +90,13 @@ class NotificationViewModel : ViewModel() {
                 if (e != null) return@addSnapshotListener
                 val today = LocalDate.now()
                 val tasks = snapshot?.toObjects(Task::class.java) ?: emptyList()
-                
+
                 tasks.forEach { task ->
                     try {
                         if (task.deadline.isBlank()) return@forEach
                         val deadline = LocalDate.parse(task.deadline)
                         val daysUntil = ChronoUnit.DAYS.between(today, deadline)
-                        
+
                         // Notify if due within 3 days
                         if (daysUntil in 0..3) {
                             val notificationId = "task_urgent_${task.id}_${task.deadline}"
@@ -118,7 +126,7 @@ class NotificationViewModel : ViewModel() {
                             DocumentChange.Type.MODIFIED -> {
                                 if (isInitialGroupsProcessed) {
                                     val wasCoLeader = previousCoLeaderStatus[group.id] ?: false
-                                    
+
                                     if (!wasCoLeader && isCoLeader && !isOwner) {
                                         val nid = "role_leader_${group.id}"
                                         checkAndNotify(appContext, roomDb, nid, "Promotion!", "You are now a Leader in '${group.name}'", group.id.hashCode() + 10)
@@ -151,7 +159,11 @@ class NotificationViewModel : ViewModel() {
         val channelId = "teamnest_smart_notifications"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "TeamNest Activity", NotificationManager.IMPORTANCE_HIGH).apply {
+            val channel = NotificationChannel(
+                channelId,
+                "TeamNest Activity",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
                 description = "Urgent alerts, invitations, and role changes"
                 enableLights(true)
                 setShowBadge(true)

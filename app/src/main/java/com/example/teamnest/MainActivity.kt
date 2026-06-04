@@ -11,7 +11,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.teamnest.Navigation.MainScreenWithBottomNav
+import com.example.teamnest.ui.theme.Groups.screens.GroupDetailScreen
 import com.example.teamnest.ui.theme.TeamnestTheme
+import com.example.teamnest.ui.theme.authentication.viewModel.AuthViewModel
+import com.example.teamnest.ui.theme.authentication.screens.LoginScreen
+import com.example.teamnest.ui.theme.authentication.screens.RegisterScreen
+import com.example.teamnest.ui.theme.authentication.screens.WelcomeOnboarding
+import com.example.teamnest.ui.theme.utils.AppPermissionHandler
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,8 +42,8 @@ fun TeamNestApp(authViewModel: AuthViewModel = viewModel()) {
         navController = navController,
         startDestination = if (currentUser != null) "home" else "welcome"
     ) {
-        composable("welcome") { 
-            WelcomeOnboarding(onGetStarted = { navController.navigate("login") }) 
+        composable("welcome") {
+            WelcomeOnboarding(onGetStarted = { navController.navigate("login") })
         }
         composable("login") {
             LoginScreen(
